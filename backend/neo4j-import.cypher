@@ -61,7 +61,8 @@ MERGE (a)-[r:RELATED_TO]->(b)
 SET r.note = row["依据/备注"];
 
 // ========= 9. 补 CONTAINS（Chapter → KnowledgePoint） =========
-MATCH (ch:Chapter), (k:KnowledgePoint)
+// 走 Course 链路限定作用域：多教材共存时重跑本脚本也不会把边挂到别的书上
+MATCH (c:Course)-[:HAS_CHAPTER]->(ch:Chapter), (k:KnowledgePoint)
 WHERE ch.name STARTS WITH k.chapter
 MERGE (ch)-[:CONTAINS]->(k);
 

@@ -1,10 +1,12 @@
 package com.example.kgpath.service;
 
+import com.example.kgpath.dto.ChapterDTO;
 import com.example.kgpath.dto.GraphDataDTO;
 import com.example.kgpath.dto.GraphLinkDTO;
 import com.example.kgpath.dto.GraphNodeDTO;
 import com.example.kgpath.dto.RelationDTO;
 import com.example.kgpath.entity.KnowledgePoint;
+import com.example.kgpath.repository.ChapterRepository;
 import com.example.kgpath.repository.KnowledgePointRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -22,6 +24,9 @@ public class RecommendService {
 
     @Autowired
     private KnowledgePointRepository kpRepository;
+
+    @Autowired
+    private ChapterRepository chapterRepository;
 
     /**
      * 核心功能：生成学习路径
@@ -48,7 +53,10 @@ public class RecommendService {
         //    难度只体现在 symbolSize 上，避免和颜色分类冲突）
         GraphDataDTO graphData = new GraphDataDTO();
         List<GraphNodeDTO> nodes = new ArrayList<>();
-        List<String> chapterOrder = List.of("第1章", "第2章", "第3章", "第4章", "第5章", "第6章", "第7章", "第8章");
+        // 章节顺序按目标知识点所属课程动态获取（替代硬编码的"第1章..第8章"，支持多教材不同章节数）
+        String courseId = kpRepository.findCourseIdByKnowledgePointId(targetId);
+        List<String> chapterOrder = courseId == null ? List.of()
+                : chapterRepository.findChaptersByCourseId(courseId).stream().map(ChapterDTO::getValue).toList();
         Set<String> addedNodeIds = new HashSet<>();
         for (KnowledgePoint kp : allPrereqs) {
             if (addedNodeIds.add(kp.getId())) {

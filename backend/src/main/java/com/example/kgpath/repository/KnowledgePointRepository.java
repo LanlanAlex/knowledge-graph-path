@@ -1,6 +1,7 @@
 package com.example.kgpath.repository;
 
 import com.example.kgpath.entity.KnowledgePoint;
+import com.example.kgpath.dto.KpCourseDTO;
 import org.springframework.data.neo4j.repository.Neo4jRepository;
 import org.springframework.data.neo4j.repository.query.Query;
 import org.springframework.data.repository.query.Param;
@@ -71,4 +72,48 @@ public interface KnowledgePointRepository extends Neo4jRepository<KnowledgePoint
             "WHERE a.id IN $ids AND b.id IN $ids " +
             "RETURN a.id as source, a.name as sourceName, b.id as target, b.name as targetName, r.note as note")
     List<RelationDTO> findPrerequisiteRelationsAmong(@Param("ids") Collection<String> ids);
+
+    // ==========================================
+    // 4. 多教材支持（按课程隔离）
+    // ==========================================
+
+    // 查某门课程下的所有知识点（只走该课程 Course->Chapter->KP 链路，防止两本书数据混淆）
+    @Query("MATCH (c:Course {id: $courseId})-[:HAS_CHAPTER]->(:Chapter)-[:CONTAINS]->(k:KnowledgePoint) RETURN k")
+    List<KnowledgePoint> findAllByCourseId(@Param("courseId") String courseId);
+
+    // 反查知识点所属课程 ID（推荐路径用它动态确定章节顺序，替代硬编码）
+    @Query("MATCH (c:Course)-[:HAS_CHAPTER]->(:Chapter)-[:CONTAINS]->(k:KnowledgePoint {id: $kpId}) RETURN c.id LIMIT 1")
+    String findCourseIdByKnowledgePointId(@Param("kpId") String kpId);
+
+    // 集合内部的 RELATED_TO 边（课程隔离版）
+    @Query("MATCH (a:KnowledgePoint)-[r:RELATED_TO]->(b:KnowledgePoint) " +
+            "WHERE a.id IN $ids AND b.id IN $ids " +
+            "RETURN a.id as source, a.name as sourceName, b.id as target, b.name as targetName, r.note as note")
+    List<RelationDTO> findRelatedRelationsAmong(@Param("ids") Collection<String> ids);
+
+    // ==========================================
+    // 5. 跨学科关联视图（两门课程之间的边）
+    // ==========================================
+
+    // 跨课程先修边：两端知识点分属不同课程
+    @Query("MATCH (a:KnowledgePoint)-[r:PREREQUISITE_OF]->(b:KnowledgePoint) " +
+            "MATCH (ca:Course)-[:HAS_CHAPTER]->(:Chapter)-[:CONTAINS]->(a) " +
+            "MATCH (cb:Course)-[:HAS_CHAPTER]->(:Chapter)-[:CONTAINS]->(b) " +
+            "WHERE ca.id <> cb.id " +
+            "RETURN DISTINCT a.id as source, a.name as sourceName, b.id as target, b.name as targetName, r.note as note")
+    List<RelationDTO> findCrossCoursePrerequisiteRelations();
+
+    // 跨课程相关边：两端知识点分属不同课程
+    @Query("MATCH (a:KnowledgePoint)-[r:RELATED_TO]->(b:KnowledgePoint) " +
+            "MATCH (ca:Course)-[:HAS_CHAPTER]->(:Chapter)-[:CONTAINS]->(a) " +
+            "MATCH (cb:Course)-[:HAS_CHAPTER]->(:Chapter)-[:CONTAINS]->(b) " +
+            "WHERE ca.id <> cb.id " +
+            "RETURN DISTINCT a.id as source, a.name as sourceName, b.id as target, b.name as targetName, r.note as note")
+    List<RelationDTO> findCrossCourseRelatedRelations();
+
+    // 批量查知识点所属课程（跨学科视图给节点标注课程归属）
+    @Query("MATCH (c:Course)-[:HAS_CHAPTER]->(:Chapter)-[:CONTAINS]->(k:KnowledgePoint) " +
+            "WHERE k.id IN $ids " +
+            "RETURN DISTINCT k.id AS kpId, c.id AS courseId, c.name AS courseName")
+    List<KpCourseDTO> findCourseMemberships(@Param("ids") Collection<String> ids);
 }
